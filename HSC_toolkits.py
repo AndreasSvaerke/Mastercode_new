@@ -891,44 +891,87 @@ class HSC_toolkits:
             return (bootstrap_variance, theta_bins)
 
     # Landy-Szalay estimator
-    def Landy_Szalay_estimator(self, data_objects, random_objects,
-                               min_bin=1*u.arcmin, max_bin=30*u.arcmin,
-                               bins=10, type='linear-bin'):
-        # angular bins
-        theta_bins, theta_edges=self.angular_bins(min_bin,max_bin,bins,type=type)
-        # define data-data, data-random, random-random pair counts
-        DD=np.zeros(bins)
-        DR=np.zeros(bins)
-        RR=np.zeros(bins)
-        N_data=data_objects.size
-        N_random=random_objects.size
-        print('Computing data-data pair counts ...')
-        for i in range(N_data):
-            theta=data_objects[i].separation(data_objects[i+1:])
-            for n in range(bins):
-                counts=( (theta>=theta_edges[n]) & (theta< theta_edges[n+1]) )
-                DD[n]+=np.sum(counts)
-        print('Computing data-random pair counts ...')
-        for i in range(N_data):
-            theta=data_objects[i].separation(random_objects)
-            for n in range(bins):
-                counts=( (theta>=theta_edges[n]) & (theta< theta_edges[n+1]) )
-                DR[n]+=np.sum(counts)
-        DR=((N_data)/(N_random))*DR # correction for different number of random vs data
-        print('Computing random-random pair counts ...')
-        for i in range(N_random):
-            theta=random_objects[i].separation(random_objects[i+1:])
-            for n in range(bins):
-                counts=( (theta>=theta_edges[n]) & (theta< theta_edges[n+1]) )
-                RR[n]+=np.sum(counts)
-        RR=(N_data*(N_data-1))/(N_random*(N_random-1))*RR # correction for different number of random vs data
-        # Landy-Szalay estimator
-        #ACF=(DD-2*DR+RR)/RR
-        ACF = DD/RR-1
-        ERROR = 1/np.sqrt(DD) 
-        # integral constraint
+    # def Landy_Szalay_estimator(self, data_objects, random_objects,
+    #                            min_bin=1*u.arcmin, max_bin=30*u.arcmin,
+    #                            bins=10, type='linear-bin'):
+        
+    #     import sys
 
-        return ( ACF, ERROR, theta_bins )
+    #     def logging(msg):
+    #         sys.stdout.write(f"\r{msg}")
+    #         sys.stdout.flush()
+
+    #     # angular bins
+    #     theta_bins, theta_edges=self.angular_bins(min_bin,max_bin,bins,type=type)
+    #     # define data-data, data-random, random-random pair counts
+    #     DD=np.zeros(bins)
+    #     DR=np.zeros(bins)
+    #     RR=np.zeros(bins)
+    #     N_data=data_objects.size
+    #     N_random=random_objects.size
+    #     logging('Computing data-data pair counts ...')
+    #     for i in range(N_data):
+    #         theta=data_objects[i].separation(data_objects[i+1:])
+    #         for n in range(bins):
+    #             counts=( (theta>=theta_edges[n]) & (theta< theta_edges[n+1]) )
+    #             DD[n]+=np.sum(counts)
+    #     logging('Computing data-random pair counts ...')
+    #     for i in range(N_data):
+    #         theta=data_objects[i].separation(random_objects)
+    #         for n in range(bins):
+    #             counts=( (theta>=theta_edges[n]) & (theta< theta_edges[n+1]) )
+    #             DR[n]+=np.sum(counts)
+    #     DR=((N_data)/(N_random))*DR # correction for different number of random vs data
+    #     logging('Computing random-random pair counts ...')
+    #     for i in range(N_random):
+    #         theta=random_objects[i].separation(random_objects[i+1:])
+    #         for n in range(bins):
+    #             counts=( (theta>=theta_edges[n]) & (theta< theta_edges[n+1]) )
+    #             RR[n]+=np.sum(counts)
+    #     RR=(N_data*(N_data-1))/(N_random*(N_random-1))*RR # correction for different number of random vs data
+    #     # Landy-Szalay estimator
+    #     #ACF=(DD-2*DR+RR)/RR
+    #     ACF = DD/RR-1
+    #     ERROR = 1/np.sqrt(DD) 
+    #     # integral constraint
+
+    #     return ( ACF, ERROR, theta_bins )
+    
+
+    def Landy_Szalay_estimator(self, data_objects, random_objects,
+                           min_bin=1*u.arcmin, max_bin=30*u.arcmin,
+                           bins=10, type='linear-bin'):
+
+        # angular bins
+        theta_bins, theta_edges = self.angular_bins(min_bin, max_bin, bins, type=type)
+        N_data = len(data_objects)
+        N_random = len(random_objects)
+
+        # --- DD counts ---
+        idx1, idx2, sep, _ = data_objects.search_around_sky(data_objects, max_bin)
+        # remove self-matches and double counting (i<j)
+        mask = idx1 < idx2
+        sep = sep[mask]
+        DD, _ = np.histogram(sep, bins=theta_edges)
+
+        # --- DR counts ---
+        idx1, idx2, sep, _ = data_objects.search_around_sky(random_objects, max_bin)
+        DR, _ = np.histogram(sep, bins=theta_edges)
+        DR = (N_data / N_random) * DR
+
+        # --- RR counts ---
+        idx1, idx2, sep, _ = random_objects.search_around_sky(random_objects, max_bin)
+        mask = idx1 < idx2
+        sep = sep[mask]
+        RR, _ = np.histogram(sep, bins=theta_edges)
+        RR = (N_data * (N_data - 1)) / (N_random * (N_random - 1)) * RR
+
+        # --- Landy-Szalay estimator ---
+        #ACF = (DD - 2*DR + RR) / RR
+        ACF = DD / RR - 1
+        ERROR = 1 / np.sqrt(DD)  #  DD.clip(min=1) avoid div-by-zero
+
+        return ACF, ERROR, theta_bins
 
     # Landy-Szalay estimator: cross
     # def Landy_Szalay_estimator_cross(self,
@@ -980,6 +1023,7 @@ class HSC_toolkits:
     #     ERROR = 1/np.sqrt(D1D2*(N_data_1*N_data_2))
     #     return ( CCF, ERROR, theta_bins )
     
+    
 
     def Landy_Szalay_estimator_cross(self,
                                     data_objects_1, data_objects_2,
@@ -996,6 +1040,12 @@ class HSC_toolkits:
         N_random_1 = len(random_objects_1)
         N_random_2 = len(random_objects_2)
 
+        import sys
+
+        def logging(msg):
+            sys.stdout.write(f"\r{msg}")
+            sys.stdout.flush()
+
         def pair_counts(cat1, cat2, norm):
             """Compute normalized pair counts using KD-tree search."""
             idx1, idx2, sep, _ = cat1.search_around_sky(cat2, max_bin)
@@ -1003,16 +1053,16 @@ class HSC_toolkits:
             hist, _ = np.histogram(sep, bins=theta_edges)
             return hist / norm
 
-        print("Computing data1-data2 pair counts ...")
+        logging("Computing data1-data2 pair counts ...")
         D1D2 = pair_counts(data_objects_1, data_objects_2, N_data_1 * N_data_2)
 
-        print("Computing data1-random2 pair counts ...")
+        logging("Computing data1-random2 pair counts ...")
         D1R2 = pair_counts(data_objects_1, random_objects_2, N_data_1 * N_random_2)
 
-        print("Computing data2-random1 pair counts ...")
+        logging("Computing data2-random1 pair counts ...")
         D2R1 = pair_counts(data_objects_2, random_objects_1, N_data_2 * N_random_1)
 
-        print("Computing random1-random2 pair counts ...")
+        logging("Computing random1-random2 pair counts ...")
         R1R2 = pair_counts(random_objects_1, random_objects_2, N_random_1 * N_random_2)
 
         # Landy-Szalay estimator
@@ -1022,6 +1072,9 @@ class HSC_toolkits:
         ERROR = 1 / np.sqrt(D1D2 * N_data_1 * N_data_2)
 
         return CCF, ERROR, theta_bins
+    
+
+
 
 
     # Davis-Peebles estimator DD/DR-1: cross
@@ -1074,6 +1127,12 @@ class HSC_toolkits:
         N_data_1 = len(data_objects_1)
         N_data_2 = len(data_objects_2)
         N_random_1 = len(random_objects_1)
+        
+        import sys
+
+        def logging(msg):
+            sys.stdout.write(f"\r{msg}")
+            sys.stdout.flush()
 
         def pair_counts(cat1, cat2, norm):
             """KD-tree accelerated pair counting."""
@@ -1081,16 +1140,18 @@ class HSC_toolkits:
             hist, _ = np.histogram(sep, bins=theta_edges)
             return hist / norm
 
-        print("Computing data1 – data2 pair counts ...")
+        logging("Computing data1 – data2 pair counts ...")
         D1D2 = pair_counts(data_objects_1, data_objects_2, N_data_1 * N_data_2)
 
-        print("Computing data2 – random1 pair counts ...")
+        logging("Computing data2 – random1 pair counts ...")
         D2R1 = pair_counts(data_objects_2, random_objects_1, N_data_2 * N_random_1)
 
         # Davis-Peebles estimator
         CCF = D1D2 / D2R1 - 1
 
-        return CCF, theta_bins
+        ERROR = 1 / np.sqrt(D1D2 * N_data_1 * N_data_2)
+
+        return CCF, ERROR, theta_bins
 
 
     def covariance_matrix(self,stats,type=None):
